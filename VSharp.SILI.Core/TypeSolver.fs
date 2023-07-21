@@ -193,8 +193,7 @@ module TypeSolver =
             else
                 let types = t |> Seq.singleton
                 // mock?
-                let mock = getMock None constraints.supertypes
-                candidates(types, Some(mock))
+                candidates(types, None)
         | _ ->
             let validate = satisfiesConstraints constraints subst
             match constraints.subtypes with
@@ -283,14 +282,7 @@ module TypeSolver =
 
     let private solveGenericConstraints getMock indTypesConstraints subst =
         let refineSubst (candidatesList : candidates list) =
-            let pickType (candidates: candidates) =
-                match (Seq.tryHead candidates.OrderedTypes) with
-                | Some t -> ConcreteType t
-                | None ->
-                    match candidates.Mock with
-                    | Some mock -> MockType mock
-                    | None -> __unreachable__()
-            let candidates = candidatesList |> List.map (fun l -> l.AsSymbolicTypes() |> Seq.head)
+            let candidates = candidatesList |> List.map (fun l -> l.Pick())
             let types, _  = List.unzip indTypesConstraints
             List.zip types candidates
             |> PersistentDict.ofSeq
