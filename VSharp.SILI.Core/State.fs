@@ -279,7 +279,7 @@ and typeStorage private (constraints, addressesTypes, typeMocks, classesParams, 
 
     new() =
         let constraints = typesConstraints()
-        let addressesTypes = Dictionary<term, symbolicType seq>()
+        let addressesTypes = Dictionary<term, candidates>()
         let typeMocks = Dictionary<Type list, ITypeMock>()
         let classesParams : symbolicType[] = Array.empty
         let methodsParams : symbolicType[] = Array.empty
@@ -303,31 +303,89 @@ and typeStorage private (constraints, addressesTypes, typeMocks, classesParams, 
         let newAddressesTypes = Dictionary()
         for entry in addressesTypes do
             let address = entry.Key
-            let types = entry.Value
-            let changeType = function
-                | ConcreteType _ as t -> t
-                | MockType m ->
-                    let superTypes = Seq.toList m.SuperTypes
-                    let mock = ref (EmptyTypeMock() :> ITypeMock)
-                    if newTypeMocks.TryGetValue(superTypes, mock) then MockType mock.Value
-                    else
-                        let newMock = m.Copy()
-                        newTypeMocks.Add(superTypes, newMock)
-                        MockType newMock
-            let newTypes = Seq.map changeType types
-            newAddressesTypes.Add(address, newTypes)
+            let addressCandidates = entry.Value
+            let changeMock (m : ITypeMock) = 
+                let superTypes = Seq.toList m.SuperTypes
+                let mock = ref (EmptyTypeMock() :> ITypeMock)
+                if newTypeMocks.TryGetValue(superTypes, mock) then mock.Value
+                else
+                    let newMock = m.Copy()
+                    newTypeMocks.Add(superTypes, newMock)
+                    newMock 
+            let newTypes = addressCandidates.OrderedTypes
+            let newMock =
+                match addressCandidates.Mock with
+                | Some m -> Some (changeMock m)
+                | None -> None
+            let newCandidates = candidates(newTypes, newMock)
+            newAddressesTypes.Add(address, newCandidates)
         typeStorage(newConstraints, newAddressesTypes, newTypeMocks, classesParams, methodsParams)
 
     member x.AddConstraint address typeConstraint =
         constraints.Add address typeConstraint
 
     member x.Item(address : term) =
-        let types = ref null
-        if addressesTypes.TryGetValue(address, types) then Some types.Value
+        // item was seq<symbolicType>
+        if addressesTypes.ContainsKey(address) then Some addressesTypes[address]
         else None
 
     member x.IsValid with get() = addressesTypes.Count = constraints.Count
 
+and
+    candidates(types : seq<Type> , typeMock: ITypeMock option) =
+        let  mutable  publicMsCoreTypes = types |> Seq.filter (fun t -> t.IsPublic && TypeUtils.isMsCoreType t)
+        let mutable privateMsCoreTypes = types |> Seq.filter (fun t -> not t.IsPublic && TypeUtils.isMsCoreType t)
+        let mutable publicUserTypes = types |> Seq.filter (fun t -> t.IsPublic && not (TypeUtils.isMsCoreType t))
+        let mutable privateUserTypes = types |> Seq.filter (fun t -> not t.IsPublic && not (TypeUtils.isMsCoreType t))
+        
+        member x.Types
+            with get() = types
+        member x.Mock
+            with get() = typeMock
+        member x.IsEmpty
+            with get() =
+                match x.Mock with
+                | Some _ -> false
+                | None -> Seq.isEmpty types
+                 
+        member x.OrderedTypes =
+            // should it return mock?
+            seq {
+                yield! publicMsCoreTypes
+                yield! publicUserTypes
+                yield! privateUserTypes
+                yield! privateMsCoreTypes
+            }
+        member x.Pick() =
+            Seq.head (x.AsSymbolicTypes())
+            
+        member x.AsSymbolicTypes() =
+            let concreteTypes = x.OrderedTypes |> Seq.map ConcreteType
+            seq {
+                yield! concreteTypes
+                if typeMock.IsSome then yield typeMock.Value |> MockType
+            }   
+                
+        member x.Choose(typesPredicate, refineMock : ITypeMock -> ITypeMock option) =
+            let filteredTypes = Seq.filter typesPredicate types
+            let mock =
+                match typeMock with
+                | Some typeMock -> refineMock typeMock
+                | None -> None
+            candidates(filteredTypes, mock)
+        
+        member x.FilterTypes(typesPredicate) =
+            let types = Seq.filter typesPredicate types
+            candidates(types, x.Mock)
+            
+        member x.Truncate(count) =
+            match x.Mock with
+            | Some mock ->
+                let concreteTypes = Seq.truncate (count - 1) (x.OrderedTypes |> Seq.map ConcreteType)
+                let mock = Seq.singleton (MockType mock)
+                Seq.append concreteTypes mock
+            | None -> Seq.truncate count (x.OrderedTypes |> Seq.map ConcreteType)
+    
 and
     [<ReferenceEquality>]
     state = {
