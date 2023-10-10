@@ -4,6 +4,7 @@ open System
 open FSharpx.Collections
 open VSharp
 open VSharp.Core
+
 module API =
     let ConfigureSolver solver =
         SolverInteraction.configureSolver solver
