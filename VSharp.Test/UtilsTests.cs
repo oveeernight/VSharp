@@ -1,6 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection.Metadata;
+using System.Text;
+using System.Timers;
+using FSharpx.Collections;
+using MessagePack.Internal;
 using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
 using NUnit.Framework;
 using VSharp.CSharpUtils;
 using VSharp;
@@ -57,8 +63,106 @@ namespace UnitTests
             Assert.AreEqual(f5, "Foo5");
         }
 
+        private static heapArrayKey currentKey;
+        private static FSharpFunc<heapArrayKey, bool> isDefault1 = FuncConvert.FromFunc<heapArrayKey, bool>(_ => false);
+        [Test]
+        public void SplittingBenchmark1()
+        {
+            var memory = new Memory.Memory();
+            var spReading =
+                FuncConvert.FromFunc<heapArrayKey, updateTreeKey<heapArrayKey, term>, term>((key, utKey) => memory.SpecializedReading(key, utKey));
+            var inst = FuncConvert
+                .FromFunc<Type,
+                    memoryRegion<heapArrayKey,
+                        productRegion<intervals<FSharpList<int>>, listProductRegion<points<int>>>>, term>(MakeSymbolic);
+            var region =
+                new memoryRegion<heapArrayKey, productRegion<intervals<FSharpList<int>>, listProductRegion<points<int>>>>(
+                    typ: typeof(string),
+                    nextUpdateTime: VectorTime.zero,
+                    explicitAddresses: PersistentSet.empty<FSharpList<int>>(),
+                    defaultValue: FSharpOption<term>.None,
+                    updates: RegionTree
+                        .empty<updateTreeKey<heapArrayKey, term>,
+                            productRegion<intervals<FSharpList<int>>, listProductRegion<points<int>>>>()
+                );
+
+            var symbolicValue = Terms.HeapRef(Terms.Constant("-1", new emptySource("123"), typeof(string)), typeof(string));
+            
+            var n = 100;
+            
+            var concreteKeys = new heapArrayKey[n];
+            var symbolicKeys = new heapArrayKey[n];
+            var address = Terms.HeapRef(Terms.Concrete(ListModule.OfSeq(new List<int>() {1}), TypeUtils.addressType), typeof(int));
+            for (int i = 0; i < concreteKeys.Length; i++)
+            {
+                var concreteIndices = ListModule.OfSeq(new List<term>() {Terms.Concrete(i, typeof(int))});
+                concreteKeys[i] = heapArrayKey.NewOneArrayIndexKey(address, concreteIndices);
+                
+                var symbolicIndices = ListModule.OfSeq(new List<term>() {Terms.Constant(i.ToString(), new emptySource("123"), typeof(int))});
+                symbolicKeys[i] = heapArrayKey.NewOneArrayIndexKey(address, symbolicIndices);
+            }
+
+            var currRegion = region;
+            var timer = new Timer();
+            var logs = new StringBuilder();
+            var readsCount = 0;
+            var writesCount = 0;
+            
+            timer.Interval = 1000;
+            timer.Elapsed += (sender, args) =>
+            {
+                logs.AppendLine(
+                    $"reads: {readsCount}, writes: {writesCount}, regionSize: {currRegion.nextUpdateTime.Head}");
+                readsCount = 0;
+                writesCount = 0;
+            };
+            timer.Enabled = true;
+            for (int i = 0; i < 1000; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    var read1 = MemoryRegion.read(currRegion, concreteKeys[j], isDefault1, inst, spReading);
+                    readsCount++;
+                    currentKey = symbolicKeys[j];
+                    currRegion = MemoryRegion.write(currRegion, FSharpOption<term>.None, symbolicKeys[j], symbolicValue);
+                    writesCount++;
+                    var read2 = MemoryRegion.read(currRegion, concreteKeys[j], isDefault1, inst, spReading);
+                    readsCount++;
+                    currentKey = concreteKeys[j];
+                    currRegion = MemoryRegion.write(currRegion, FSharpOption<term>.None, concreteKeys[j],
+                        Terms.HeapRef(Terms.Concrete(i, TypeUtils.addressType), typeof(string)));
+                    writesCount++;
+                    var read3 = MemoryRegion.read(currRegion, symbolicKeys[j], isDefault1, inst, spReading);
+                    readsCount++;
+                }
+            }
+            Console.WriteLine(logs);
+        }
+
+        private FSharpFunc<heapArrayKey, string> mkName = FuncConvert.FromFunc<heapArrayKey, string>(_ => "asd");
+
+        private FSharpFunc<state, FSharpFunc<heapArrayKey, bool>> isDeafult2 =
+            FuncConvert.FromFunc<state, FSharpFunc<heapArrayKey, bool>>(state =>
+                isDefault1);
+        private term MakeSymbolic(Type typ,
+            memoryRegion<heapArrayKey, productRegion<intervals<FSharpList<int>>, listProductRegion<points<int>>>> mr)
+        {
+            Func<state,  memoryRegion<heapArrayKey, productRegion<intervals<FSharpList<int>>, listProductRegion<points<int>>>>> e = state => mr;
+            var extractor = FuncConvert.FromFunc(e);
+            var arrayType = new arrayType(isVector: false, elemType: typeof(string), dimension: 1);
+            var picker =
+                new Memory.regionPicker<heapArrayKey,
+                    productRegion<intervals<FSharpList<int>>, listProductRegion<points<int>>>>(
+                    sort: regionSort.NewArrayIndexSort(arrayType), extract: extractor, mkName: mkName,
+                    isDefaultRegion: true, isDefaultKey: isDeafult2);
+            var source = new Memory.arrayReading(time: VectorTime.zero, key: currentKey, memoryObject: mr,
+                picker: picker);
+            return Terms.Constant("asd", source, typ);
+        }
+
         public interface INothing {}
         public class Nothing : INothing {}
+        
 
         public class GenericParametersKeeper<A, B, C, D, E, F, G, H, I, J>
             where A : B

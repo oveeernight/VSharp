@@ -45,7 +45,7 @@ module TypeUtils =
 
     let indexType = typeof<int>
     let lengthType = typeof<int>
-    let addressType = typeof<AddressTypeAgent>
+    let public addressType = typeof<AddressTypeAgent>
     let systemRuntimeType = typeof<Object>.GetType()
 
     let szArrayHelper = lazy Type.GetType("System.SZArrayHelper")

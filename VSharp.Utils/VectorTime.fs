@@ -2,7 +2,7 @@ namespace VSharp
 
 open System.Runtime.CompilerServices
 
-type vectorTime = int32 list
+type public vectorTime = int32 list
 
 module VectorTime =
 

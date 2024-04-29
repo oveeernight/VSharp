@@ -6,14 +6,14 @@ type IRegionTreeKey<'a> =
 /// Implementation of region tree. Region tree is a tree indexed by IRegion's and having the following invariants:
 /// - all regions of one node are disjoint;
 /// - the parent region includes all child regions.
-type regionTree<'key, 'reg when 'reg :> IRegion<'reg> and 'key : equality and 'reg : equality and 'key :> IRegionTreeKey<'key>> =
+type public regionTree<'key, 'reg when 'reg :> IRegion<'reg> and 'key : equality and 'reg : equality and 'key :> IRegionTreeKey<'key>> =
     | Node of pdict<'reg, 'key * regionTree<'key, 'reg>>
 
-module RegionTree =
+module public RegionTree =
 
     let private shouldFilter = true
 
-    let empty<'key, 'reg when 'reg :> IRegion<'reg> and 'key : equality and 'reg : equality and 'key :> IRegionTreeKey<'key>> : regionTree<'key, 'reg> = Node PersistentDict.empty
+    let public empty<'key, 'reg when 'reg :> IRegion<'reg> and 'key : equality and 'reg : equality and 'key :> IRegionTreeKey<'key>> : regionTree<'key, 'reg> = Node PersistentDict.empty
 
     let isEmpty (Node d) = PersistentDict.isEmpty d
 

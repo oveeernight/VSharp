@@ -57,6 +57,9 @@
     </ItemGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="VSharp.Test" />
+    </ItemGroup>
+    <ItemGroup>
       <ProjectReference Include="..\VSharp.CSharpUtils\VSharp.CSharpUtils.csproj" />
     </ItemGroup>
 
