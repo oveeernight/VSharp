@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Reflection.Metadata;
 using System.Text;
 using System.Timers;
@@ -88,18 +90,16 @@ namespace UnitTests
 
             var symbolicValue = Terms.HeapRef(Terms.Constant("-1", new emptySource("123"), typeof(string)), typeof(string));
             
-            var n = 100;
+            var n = 50;
             
             var concreteKeys = new heapArrayKey[n];
             var symbolicKeys = new heapArrayKey[n];
-            var address = Terms.HeapRef(Terms.Concrete(ListModule.OfSeq(new List<int>() {1}), TypeUtils.addressType), typeof(int));
+            var address = Terms.Concrete(ListModule.OfSeq(new List<int>() {1}), TypeUtils.addressType);
             for (int i = 0; i < concreteKeys.Length; i++)
             {
-                var concreteIndices = ListModule.OfSeq(new List<term>() {Terms.Concrete(i, typeof(int))});
-                concreteKeys[i] = heapArrayKey.NewOneArrayIndexKey(address, concreteIndices);
-                
-                var symbolicIndices = ListModule.OfSeq(new List<term>() {Terms.Constant(i.ToString(), new emptySource("123"), typeof(int))});
-                symbolicKeys[i] = heapArrayKey.NewOneArrayIndexKey(address, symbolicIndices);
+                var z = i;
+                concreteKeys[i] = heapArrayKey.NewOneArrayIndexKey(address, ListModule.OfSeq(new List<term>() {Terms.Concrete(z, typeof(int))}));
+                symbolicKeys[i] = heapArrayKey.NewOneArrayIndexKey(address, ListModule.OfSeq(new List<term>() {Terms.Constant(z.ToString(), new emptySource("123"), typeof(int))}));
             }
 
             var currRegion = region;
@@ -107,20 +107,24 @@ namespace UnitTests
             var logs = new StringBuilder();
             var readsCount = 0;
             var writesCount = 0;
-            
+            var stopWatch = new Stopwatch();
             timer.Interval = 1000;
             timer.Elapsed += (sender, args) =>
             {
                 logs.AppendLine(
-                    $"reads: {readsCount}, writes: {writesCount}, regionSize: {currRegion.nextUpdateTime.Head}");
+                    $"{readsCount} {writesCount} {currRegion.nextUpdateTime.Head}");
                 readsCount = 0;
                 writesCount = 0;
             };
             timer.Enabled = true;
-            for (int i = 0; i < 1000; i++)
+            stopWatch.Start();
+            var k = 0;
+            var runningTime = 30;
+            while (stopWatch.Elapsed.Seconds < runningTime)
             {
                 for (int j = 0; j < n; j++)
                 {
+                    if (stopWatch.Elapsed.Seconds > runningTime) break;
                     var read1 = MemoryRegion.read(currRegion, concreteKeys[j], isDefault1, inst, spReading);
                     readsCount++;
                     currentKey = symbolicKeys[j];
@@ -130,13 +134,18 @@ namespace UnitTests
                     readsCount++;
                     currentKey = concreteKeys[j];
                     currRegion = MemoryRegion.write(currRegion, FSharpOption<term>.None, concreteKeys[j],
-                        Terms.HeapRef(Terms.Concrete(i, TypeUtils.addressType), typeof(string)));
+                        Terms.HeapRef(Terms.Concrete(VectorTime.zero, TypeUtils.addressType), typeof(string)));
                     writesCount++;
                     var read3 = MemoryRegion.read(currRegion, symbolicKeys[j], isDefault1, inst, spReading);
                     readsCount++;
                 }
+
+                k++;
             }
-            Console.WriteLine(logs);
+
+            timer.Enabled = false;
+            using var writer = new StreamWriter("/home/overnight/study/read.txt", false);
+            writer.Write(logs);
         }
 
         private FSharpFunc<heapArrayKey, string> mkName = FuncConvert.FromFunc<heapArrayKey, string>(_ => "asd");
