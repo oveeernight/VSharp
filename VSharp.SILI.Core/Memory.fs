@@ -562,7 +562,7 @@ module internal Memory =
             | ConcreteType t -> state.SubstituteTypeVariables t |> ConcreteType
             | MockType _ -> __unreachable__()
 
-        new() as self =
+        public new() as self =
             Memory(
                 EvaluationStack.empty,
                 CallStack.empty,

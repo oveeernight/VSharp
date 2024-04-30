@@ -7,6 +7,14 @@ open VSharp
 open VSharp.Core
 
 [<StructuralEquality; NoComparison>]
+type emptySource = {s : string}
+with
+    interface INonComposableSymbolicConstantSource with
+        override x.TypeOfLocation = typeof<string>
+        override x.SubTerms = List.empty
+        override x.Time = VectorTime.zero
+
+[<StructuralEquality; NoComparison>]
 type functionResultConstantSource =
     {
         mock : MethodMock

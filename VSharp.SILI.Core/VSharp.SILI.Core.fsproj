@@ -51,6 +51,9 @@
       <ProjectReference Include="..\VSharp.TestExtensions\VSharp.TestExtensions.csproj" />
       <ProjectReference Include="..\VSharp.Utils\VSharp.Utils.fsproj" />
     </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="VSharp.Test" />
+    </ItemGroup>
 
     <ItemGroup>
       <PackageReference Update="FSharp.Core" Version="7.0.*" />
